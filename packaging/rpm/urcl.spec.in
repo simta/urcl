@@ -1,0 +1,57 @@
+# package options
+
+Summary:        A simple redis client library
+Name:           @PACKAGE_NAME@
+Version:        @PACKAGE_VERSION@
+Release:        1%{?dist}
+License:        MIT
+Group:          System Environment/Libraries
+URL:            http://flowerysong.com/
+Source0:        %{name}-%{version}.tar.gz
+BuildRequires:  setup
+BuildRequires:  hiredis-devel
+
+%description
+urcl is the REMote DICtionary Client for Redis.
+
+%package        devel
+Summary:        Headers for urcl
+Group:          Development/Libraries
+Requires:       %{name} = %{version}-%{release}
+
+%description    devel
+Headers for urcl
+
+%prep
+%setup -q
+
+%build
+%configure --disable-static
+
+make %{?_smp_mflags}
+
+%install
+rm -rf %{buildroot}
+make DESTDIR=%{buildroot} INSTALL_OPTS='' install
+rm -f %{buildroot}/%{_libdir}/liburcl.la
+
+%clean
+rm -rf %{buildroot}
+
+%post -p /sbin/ldconfig
+
+%postun -p /sbin/ldconfig
+
+%files
+%defattr(-,root,root,-)
+%{_libdir}/liburcl.so.*
+
+%files devel
+%defattr(-,root,root,-)
+%{_libdir}/liburcl.so
+%{_libdir}/pkgconfig/urcl.pc
+%{_includedir}/urcl.h
+
+%changelog
+* %(date "+%a %b %d %Y") (Automated RPM build) - %{version}-%{release}
+- See git log for actual changes.
