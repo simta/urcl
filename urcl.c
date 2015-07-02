@@ -17,6 +17,7 @@ struct urcl {
 };
 
 static int urcl_reconnect( URCL * );
+static int urcl_redirect( URCL *, char * );
 
     URCL *
 urcl_connect( const char *host, int port )
@@ -46,6 +47,29 @@ cleanup:
 }
 
     static int
+urcl_redirect( URCL *r, char *err )
+{
+    char    *host, *port;
+
+    if (( strncmp( err, "MOVED ", 6 ) == 0 ) ||
+            ( strncmp( err, "ASK ", 4 ) == 0 )) {
+        /* redis cluster, need to connect to a different node */
+        host = strchr( err, ' ' ) + 1;
+        host = strchr( host, ' ' ) + 1;
+        port = strchr( host, ':' );
+        *port = '\0';
+        free( r->host );
+        r->host = strdup( host );
+        r->port = atoi( port + 1 );
+        *port = ':';
+        urcl_reconnect( r );
+        /* If it's an ASK redirect we should send ASKING */
+        return( 1 );
+    }
+    return( 0 );
+}
+
+    static int
 urcl_reconnect( URCL *r )
 {
     if ( r->rc != NULL ) {
@@ -68,17 +92,24 @@ urcl_reconnect( URCL *r )
 urcl_set( URCL *r, const char *key, const char *value )
 {
     int         ret = 1;
-    redisReply  *res;
+    redisReply  *res = NULL;
 
-    if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
-        return( 1 );
-    }
+    do {
+        if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
+            return( 1 );
+        }
 
-    if (( res = redisCommand( r->rc, "SET %s %s", key, value )) == NULL ) {
-        redisFree( r->rc );
-        r->rc = NULL;
-        return( 1 );
-    }
+        if ( res ) {
+            freeReplyObject( res );
+        }
+
+        if (( res = redisCommand( r->rc, "SET %s %s", key, value )) == NULL ) {
+            redisFree( r->rc );
+            r->rc = NULL;
+            return( 1 );
+        }
+    } while (( res->type == REDIS_REPLY_ERROR ) &&
+            urcl_redirect( r, res->str ));
 
     if (( res->type == REDIS_REPLY_STRING ) && ( res->len == 2 ) &&
             ( memcmp( res->str, "OK", 2 ) == 0 )) {
@@ -93,18 +124,25 @@ urcl_set( URCL *r, const char *key, const char *value )
 urcl_hset( URCL *r, const char *key, const char *field, const char *value )
 {
     int         ret = 1;
-    redisReply  *res;
+    redisReply  *res = NULL;
 
-    if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
-        return( 1 );
-    }
+    do {
+        if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
+            return( 1 );
+        }
 
-    if (( res = redisCommand( r->rc, "HSET %s %s %s",
-            key, field, value )) == NULL ) {
-        redisFree( r->rc );
-        r->rc = NULL;
-        return( 1 );
-    }
+        if ( res ) {
+            freeReplyObject( res );
+        }
+
+        if (( res = redisCommand( r->rc, "HSET %s %s %s",
+                key, field, value )) == NULL ) {
+            redisFree( r->rc );
+            r->rc = NULL;
+            return( 1 );
+        }
+    } while (( res->type == REDIS_REPLY_ERROR ) &&
+            urcl_redirect( r, res->str ));
 
     if (( res->type == REDIS_REPLY_INTEGER ) && ( res->integer == 0 )) {
         ret = 0;
@@ -119,19 +157,26 @@ urcl_expire( URCL *r, const char *key, long long expiration )
 {
     int         ret = 1;
     char        buf[ 256 ];
-    redisReply  *res;
-
-    if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
-        return( 1 );
-    }
+    redisReply  *res = NULL;
 
     snprintf( buf, 256, "%lld", expiration );
 
-    if (( res = redisCommand( r->rc, "EXPIRE %s %s", key, buf )) == NULL ) {
-        redisFree( r->rc );
-        r->rc = NULL;
-        return( 1 );
-    }
+    do {
+        if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
+            return( 1 );
+        }
+
+        if ( res ) {
+            freeReplyObject( res );
+        }
+
+        if (( res = redisCommand( r->rc, "EXPIRE %s %s", key, buf )) == NULL ) {
+            redisFree( r->rc );
+            r->rc = NULL;
+            return( 1 );
+        }
+    } while (( res->type == REDIS_REPLY_ERROR ) &&
+            urcl_redirect( r, res->str ));
 
     if (( res->type == REDIS_REPLY_INTEGER ) && ( res->integer == 0 )) {
         ret = 0;
@@ -146,19 +191,26 @@ urcl_incrby( URCL *r, const char *key, long long incr )
 {
     long long   ret = -1;
     char        buf[ 256 ];
-    redisReply  *res;
-
-    if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
-        return( 1 );
-    }
+    redisReply  *res = NULL;
 
     snprintf( buf, 256, "%lld", incr );
 
-    if (( res = redisCommand( r->rc, "INCRBY %s %s", key, buf )) == NULL ) {
-        redisFree( r->rc );
-        r->rc = NULL;
-        return( 1 );
-    }
+    do {
+        if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
+            return( 1 );
+        }
+
+        if ( res ) {
+            freeReplyObject( res );
+        }
+
+        if (( res = redisCommand( r->rc, "INCRBY %s %s", key, buf )) == NULL ) {
+            redisFree( r->rc );
+            r->rc = NULL;
+            return( 1 );
+        }
+    } while (( res->type == REDIS_REPLY_ERROR ) &&
+            urcl_redirect( r, res->str ));
 
     if ( res->type == REDIS_REPLY_INTEGER ) {
         ret = res->integer;
@@ -172,17 +224,25 @@ urcl_incrby( URCL *r, const char *key, long long incr )
 urcl_get( URCL *r, const char *key )
 {
     char        *ret = NULL;
-    redisReply  *res;
+    redisReply  *res = NULL;
 
-    if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
-        return( NULL );
-    }
+    do {
+        if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
+            return( NULL );
+        }
 
-    if (( res = redisCommand( r->rc, "GET %s", key )) == NULL ) {
-        redisFree( r->rc );
-        r->rc = NULL;
-        return( NULL );
-    }
+        if ( res ) {
+            freeReplyObject( res );
+        }
+
+        if (( res = redisCommand( r->rc, "GET %s", key )) == NULL ) {
+            redisFree( r->rc );
+            r->rc = NULL;
+            return( NULL );
+        }
+
+    } while (( res->type == REDIS_REPLY_ERROR ) &&
+            urcl_redirect( r, res->str ));
 
     if ( res->type == REDIS_REPLY_STRING ) {
         ret = strdup( res->str );
@@ -196,17 +256,24 @@ urcl_get( URCL *r, const char *key )
 urcl_hget( URCL *r, const char *key, const char *field )
 {
     char        *ret = NULL;
-    redisReply  *res;
+    redisReply  *res = NULL;
 
-    if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
-        return( NULL );
-    }
+    do {
+        if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
+            return( NULL );
+        }
 
-    if (( res = redisCommand( r->rc, "HGET %s %s", key, field )) == NULL ) {
-        redisFree( r->rc );
-        r->rc = NULL;
-        return( NULL );
-    }
+        if ( res ) {
+            freeReplyObject( res );
+        }
+
+        if (( res = redisCommand( r->rc, "HGET %s %s", key, field )) == NULL ) {
+            redisFree( r->rc );
+            r->rc = NULL;
+            return( NULL );
+        }
+    } while (( res->type == REDIS_REPLY_ERROR ) &&
+            urcl_redirect( r, res->str ));
 
     if ( res->type == REDIS_REPLY_STRING ) {
         ret = strdup( res->str );
@@ -220,17 +287,24 @@ urcl_hget( URCL *r, const char *key, const char *field )
 urcl_del( URCL *r, const char *key )
 {
     int         ret = 1;
-    redisReply  *res;
+    redisReply  *res = NULL;
 
-    if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
-        return( 1 );
-    }
+    do {
+        if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
+            return( 1 );
+        }
 
-    if (( res = redisCommand( r->rc, "DEL %s", key )) == NULL ) {
-        redisFree( r->rc );
-        r->rc = NULL;
-        return( 1 );
-    }
+        if ( res ) {
+            freeReplyObject( res );
+        }
+
+        if (( res = redisCommand( r->rc, "DEL %s", key )) == NULL ) {
+            redisFree( r->rc );
+            r->rc = NULL;
+            return( 1 );
+        }
+    } while (( res->type == REDIS_REPLY_ERROR ) &&
+            urcl_redirect( r, res->str ));
 
     if ( res->type == REDIS_REPLY_INTEGER ) {
         ret = 0;
