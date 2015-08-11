@@ -2,37 +2,72 @@
  * MIT license. See COPYING.
  */
 
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include <hiredis/hiredis.h>
 
 #include "urcl.h"
 
-struct urcl {
-    redisContext    *rc;
-    char            *host;
-    int             port;
+struct urcl_host {
+    char                *h_ip;
+    int                 h_port;
+    struct urcl_host    *h_next;
+    struct urcl_host    *h_prev;
 };
 
+struct urcl {
+    redisContext        *rc;
+    char                *hostname;
+    int                 port;
+    struct urcl_host    *host;
+};
+
+static int urcl_host_insert( URCL *, const char *, int );
 static int urcl_reconnect( URCL * );
 static int urcl_redirect( URCL *, char * );
 
     URCL *
 urcl_connect( const char *host, int port )
 {
-    URCL *r;
+    URCL                *r;
+    struct addrinfo     hints;
+    struct addrinfo     *air;
+    struct addrinfo     *ai;
+    char                hbuf[ NI_MAXHOST ];
+    int                 rc;
 
     if (( r = calloc( 1, sizeof( struct urcl ))) == NULL ) {
         return( NULL );
     }
 
-    if (( r->host = strdup( host )) == NULL ) {
+    if (( r->hostname = strdup( host )) == NULL ) {
         goto cleanup;
     }
 
     r->port = port;
+
+    memset( &hints, 0, sizeof( struct addrinfo ));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_ADDRCONFIG;
+
+    if (( rc = getaddrinfo( r->hostname, NULL, &hints, &air ))) {
+        goto cleanup;
+    }
+
+    for ( ai = air; ai != NULL; ai = ai->ai_next ) {
+        if (( rc = getnameinfo( ai->ai_addr, ai->ai_addrlen,
+                hbuf, sizeof( hbuf ), NULL, 0, NI_NUMERICHOST )) == 0 ) {
+            urcl_host_insert( r, hbuf, r->port );
+        }
+    }
+
+    freeaddrinfo( air );
 
     if ( urcl_reconnect( r ) != 0 ) {
         goto cleanup;
@@ -47,6 +82,42 @@ cleanup:
 }
 
     static int
+urcl_host_insert( URCL *r, const char *ip, int port )
+{
+    struct urcl_host        *he;
+
+    if ( r->host == NULL ) {
+        r->host = calloc( 1, sizeof( struct urcl_host ));
+        r->host->h_next = r->host;
+        r->host->h_prev = r->host;
+        he = r->host;
+    } else {
+        /* Check for an existing entry */
+        he = r->host;
+        do {
+            if (( strcmp( he->h_ip, ip ) == 0 ) &&
+                    ( he->h_port == port )) {
+                r->host = he;
+                return( 0 );
+            }
+            he = he->h_next;
+        } while ( he != r->host );
+
+        /* Insert a new entry */
+        he = calloc( 1, sizeof( struct urcl_host ));
+        he->h_next = r->host->h_next;
+        he->h_prev = r->host;
+        he->h_next->h_prev = he;
+        he->h_prev->h_next = he;
+    }
+
+    he->h_ip = strdup( ip );
+    he->h_port = port;
+    r->host = he;
+    return( 0 );
+}
+
+    static int
 urcl_redirect( URCL *r, char *err )
 {
     char    *host, *port;
@@ -58,12 +129,10 @@ urcl_redirect( URCL *r, char *err )
         host = strchr( host, ' ' ) + 1;
         port = strchr( host, ':' );
         *port = '\0';
-        free( r->host );
-        r->host = strdup( host );
-        r->port = atoi( port + 1 );
+        urcl_host_insert( r, host, atoi( port + 1 ));
         *port = ':';
         urcl_reconnect( r );
-        /* If it's an ASK redirect we should send ASKING */
+        /* FIXME: If it's an ASK redirect we should send ASKING */
         return( 1 );
     }
     return( 0 );
@@ -72,20 +141,28 @@ urcl_redirect( URCL *r, char *err )
     static int
 urcl_reconnect( URCL *r )
 {
+    struct urcl_host    *host;
+
     if ( r->rc != NULL ) {
         redisFree( r->rc );
     }
 
-    r->rc = redisConnect( r->host, r->port );
-    if ( r->rc == NULL ) {
-        return( 1 );
-    } else if ( r->rc->err ) {
-        redisFree( r->rc );
-        r->rc = NULL;
-        return( 1 );
-    }
+    host = r->host;
+    do {
+        r->rc = redisConnect( host->h_ip, host->h_port );
+        if ( r->rc ) {
+            if ( r->rc->err ) {
+                redisFree( r->rc );
+                r->rc = NULL;
+            } else {
+                r->host = host;
+                return( 0 );
+            }
+        }
+        host = host->h_next;
+    } while ( host != r->host );
 
-    return( 0 );
+    return( 1 );
 }
 
     int
