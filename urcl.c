@@ -227,7 +227,7 @@ urcl_hset( URCL *r, const char *key, const char *field, const char *value )
     } while (( res->type == REDIS_REPLY_ERROR ) &&
             urcl_redirect( r, res->str ));
 
-    if (( res->type == REDIS_REPLY_INTEGER ) && ( res->integer == 0 )) {
+    if ( res->type == REDIS_REPLY_INTEGER ) {
         ret = 0;
     }
 
