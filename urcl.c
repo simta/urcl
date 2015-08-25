@@ -31,6 +31,7 @@ static int urcl_host_insert( URCL *, const char *, int );
 static int urcl_checkconnection( URCL * );
 static int urcl_reconnect( URCL * );
 static int urcl_redirect( URCL *, char * );
+static void urcl_asking( URCL *r );
 
     URCL *
 urcl_connect( const char *host, int port )
@@ -133,7 +134,9 @@ urcl_redirect( URCL *r, char *err )
         urcl_host_insert( r, host, atoi( port + 1 ));
         *port = ':';
         urcl_reconnect( r );
-        /* FIXME: If it's an ASK redirect we should send ASKING */
+        if ( strncmp( err, "ASK ", 4 ) == 0 ) {
+            urcl_asking( r );
+        }
         return( 1 );
     }
     return( 0 );
@@ -173,6 +176,69 @@ urcl_checkconnection( URCL *r )
         return( 1 );
     }
     return( 0 );
+}
+
+    static void
+urcl_asking( URCL *r )
+{
+    redisReply  *res = NULL;
+
+    if (( res = redisCommand( r->rc, "ASKING" )) == NULL ) {
+        redisFree( r->rc );
+        r->rc = NULL;
+    } else {
+        freeReplyObject( res );
+    }
+}
+
+     int
+urcl_readonly( URCL *r )
+{
+    int         ret = 1;
+    redisReply  *res = NULL;
+
+    if ( urcl_checkconnection( r )) {
+        return( 1 );
+    }
+
+    if (( res = redisCommand( r->rc, "READONLY" )) == NULL ) {
+        redisFree( r->rc );
+        r->rc = NULL;
+        return( 1 );
+    }
+
+    if (( res->type == REDIS_REPLY_STRING ) && ( res->len == 2 ) &&
+            ( memcmp( res->str, "OK", 2 ) == 0 )) {
+        ret = 0;
+    }
+
+    freeReplyObject( res );
+    return( ret );
+}
+
+    int
+urcl_readwrite( URCL *r )
+{
+    int         ret = 1;
+    redisReply  *res = NULL;
+
+    if ( urcl_checkconnection( r )) {
+        return( 1 );
+    }
+
+    if (( res = redisCommand( r->rc, "READWRITE" )) == NULL ) {
+        redisFree( r->rc );
+        r->rc = NULL;
+        return( 1 );
+    }
+
+    if (( res->type == REDIS_REPLY_STRING ) && ( res->len == 2 ) &&
+            ( memcmp( res->str, "OK", 2 ) == 0 )) {
+        ret = 0;
+    }
+
+    freeReplyObject( res );
+    return( ret );
 }
 
     int
