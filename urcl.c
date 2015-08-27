@@ -16,12 +16,12 @@
 struct urcl_host {
     char                *h_ip;
     int                 h_port;
+    redisContext        *h_rc;
     struct urcl_host    *h_next;
     struct urcl_host    *h_prev;
 };
 
 struct urcl {
-    redisContext        *rc;
     char                *hostname;
     int                 port;
     struct urcl_host    *host;
@@ -147,17 +147,15 @@ urcl_reconnect( URCL *r )
 {
     struct urcl_host    *host;
 
-    if ( r->rc != NULL ) {
-        redisFree( r->rc );
-    }
-
     host = r->host;
     do {
-        r->rc = redisConnect( host->h_ip, host->h_port );
-        if ( r->rc ) {
-            if ( r->rc->err ) {
-                redisFree( r->rc );
-                r->rc = NULL;
+        if ( host->h_rc == NULL ) {
+            host->h_rc = redisConnect( host->h_ip, host->h_port );
+        }
+        if ( host->h_rc ) {
+            if ( host->h_rc->err ) {
+                redisFree( host->h_rc );
+                host->h_rc = NULL;
             } else {
                 r->host = host;
                 return( 0 );
@@ -172,7 +170,7 @@ urcl_reconnect( URCL *r )
     static int
 urcl_checkconnection( URCL *r )
 {
-    if ( r->rc == NULL && ( urcl_reconnect( r ) != 0 )) {
+    if ( r->host->h_rc == NULL && ( urcl_reconnect( r ) != 0 )) {
         return( 1 );
     }
     return( 0 );
@@ -183,9 +181,9 @@ urcl_asking( URCL *r )
 {
     redisReply  *res = NULL;
 
-    if (( res = redisCommand( r->rc, "ASKING" )) == NULL ) {
-        redisFree( r->rc );
-        r->rc = NULL;
+    if (( res = redisCommand( r->host->h_rc, "ASKING" )) == NULL ) {
+        redisFree( r->host->h_rc );
+        r->host->h_rc = NULL;
     } else {
         freeReplyObject( res );
     }
@@ -201,9 +199,9 @@ urcl_readonly( URCL *r )
         return( 1 );
     }
 
-    if (( res = redisCommand( r->rc, "READONLY" )) == NULL ) {
-        redisFree( r->rc );
-        r->rc = NULL;
+    if (( res = redisCommand( r->host->h_rc, "READONLY" )) == NULL ) {
+        redisFree( r->host->h_rc );
+        r->host->h_rc = NULL;
         return( 1 );
     }
 
@@ -226,9 +224,9 @@ urcl_readwrite( URCL *r )
         return( 1 );
     }
 
-    if (( res = redisCommand( r->rc, "READWRITE" )) == NULL ) {
-        redisFree( r->rc );
-        r->rc = NULL;
+    if (( res = redisCommand( r->host->h_rc, "READWRITE" )) == NULL ) {
+        redisFree( r->host->h_rc );
+        r->host->h_rc = NULL;
         return( 1 );
     }
 
@@ -254,9 +252,9 @@ urcl_set( URCL *r, const char *key, const char *value )
             return( 1 );
         }
 
-        if (( res = redisCommand( r->rc, "SET %s %s", key, value )) == NULL ) {
-            redisFree( r->rc );
-            r->rc = NULL;
+        if (( res = redisCommand( r->host->h_rc, "SET %s %s", key, value )) == NULL ) {
+            redisFree( r->host->h_rc );
+            r->host->h_rc = NULL;
             return( 1 );
         }
     } while (( res->type == REDIS_REPLY_ERROR ) &&
@@ -284,10 +282,10 @@ urcl_hset( URCL *r, const char *key, const char *field, const char *value )
             return( 1 );
         }
 
-        if (( res = redisCommand( r->rc, "HSET %s %s %s",
+        if (( res = redisCommand( r->host->h_rc, "HSET %s %s %s",
                 key, field, value )) == NULL ) {
-            redisFree( r->rc );
-            r->rc = NULL;
+            redisFree( r->host->h_rc );
+            r->host->h_rc = NULL;
             return( 1 );
         }
     } while (( res->type == REDIS_REPLY_ERROR ) &&
@@ -317,9 +315,9 @@ urcl_expire( URCL *r, const char *key, long long expiration )
             return( 1 );
         }
 
-        if (( res = redisCommand( r->rc, "EXPIRE %s %s", key, buf )) == NULL ) {
-            redisFree( r->rc );
-            r->rc = NULL;
+        if (( res = redisCommand( r->host->h_rc, "EXPIRE %s %s", key, buf )) == NULL ) {
+            redisFree( r->host->h_rc );
+            r->host->h_rc = NULL;
             return( 1 );
         }
     } while (( res->type == REDIS_REPLY_ERROR ) &&
@@ -349,9 +347,9 @@ urcl_incrby( URCL *r, const char *key, long long incr )
             return( 1 );
         }
 
-        if (( res = redisCommand( r->rc, "INCRBY %s %s", key, buf )) == NULL ) {
-            redisFree( r->rc );
-            r->rc = NULL;
+        if (( res = redisCommand( r->host->h_rc, "INCRBY %s %s", key, buf )) == NULL ) {
+            redisFree( r->host->h_rc );
+            r->host->h_rc = NULL;
             return( 1 );
         }
     } while (( res->type == REDIS_REPLY_ERROR ) &&
@@ -378,9 +376,9 @@ urcl_get( URCL *r, const char *key )
             return( NULL );
         }
 
-        if (( res = redisCommand( r->rc, "GET %s", key )) == NULL ) {
-            redisFree( r->rc );
-            r->rc = NULL;
+        if (( res = redisCommand( r->host->h_rc, "GET %s", key )) == NULL ) {
+            redisFree( r->host->h_rc );
+            r->host->h_rc = NULL;
             return( NULL );
         }
 
@@ -408,9 +406,9 @@ urcl_hget( URCL *r, const char *key, const char *field )
             return( NULL );
         }
 
-        if (( res = redisCommand( r->rc, "HGET %s %s", key, field )) == NULL ) {
-            redisFree( r->rc );
-            r->rc = NULL;
+        if (( res = redisCommand( r->host->h_rc, "HGET %s %s", key, field )) == NULL ) {
+            redisFree( r->host->h_rc );
+            r->host->h_rc = NULL;
             return( NULL );
         }
     } while (( res->type == REDIS_REPLY_ERROR ) &&
@@ -437,9 +435,9 @@ urcl_del( URCL *r, const char *key )
             return( 1 );
         }
 
-        if (( res = redisCommand( r->rc, "DEL %s", key )) == NULL ) {
-            redisFree( r->rc );
-            r->rc = NULL;
+        if (( res = redisCommand( r->host->h_rc, "DEL %s", key )) == NULL ) {
+            redisFree( r->host->h_rc );
+            r->host->h_rc = NULL;
             return( 1 );
         }
     } while (( res->type == REDIS_REPLY_ERROR ) &&
