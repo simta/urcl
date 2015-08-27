@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <hiredis/hiredis.h>
 
@@ -42,6 +43,7 @@ urcl_connect( const char *host, int port )
     struct addrinfo     *ai;
     char                hbuf[ NI_MAXHOST ];
     int                 rc;
+    int                 i;
 
     if (( r = calloc( 1, sizeof( struct urcl ))) == NULL ) {
         return( NULL );
@@ -70,6 +72,12 @@ urcl_connect( const char *host, int port )
     }
 
     freeaddrinfo( air );
+
+    /* Lazily select a random initial host, since getaddrinfo() defaults to
+     * sorting the returned IPs. */
+    for ( i = ( getpid( ) % 8 ); i > 0; i-- ) {
+        r->host = r->host->h_next;
+    }
 
     if ( urcl_reconnect( r ) != 0 ) {
         goto cleanup;
