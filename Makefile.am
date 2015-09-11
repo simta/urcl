@@ -13,4 +13,4 @@ include_HEADERS = urcl.h
 
 nodist_pkgconfig_DATA = packaging/pkgconfig/urcl.pc
 
-EXTRA_DIST = packaging/rpm/urcl.spec
+EXTRA_DIST = VERSION packaging/rpm/urcl.spec
