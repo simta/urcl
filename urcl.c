@@ -24,7 +24,7 @@ struct urcl_host {
 
 struct urcl {
     char                *hostname;
-    int                 port;
+    int                 hostcount;
     struct urcl_host    *host;
 };
 
@@ -53,8 +53,6 @@ urcl_connect( const char *host, int port )
         goto cleanup;
     }
 
-    r->port = port;
-
     memset( &hints, 0, sizeof( struct addrinfo ));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -67,16 +65,21 @@ urcl_connect( const char *host, int port )
     for ( ai = air; ai != NULL; ai = ai->ai_next ) {
         if (( rc = getnameinfo( ai->ai_addr, ai->ai_addrlen,
                 hbuf, sizeof( hbuf ), NULL, 0, NI_NUMERICHOST )) == 0 ) {
-            urcl_host_insert( r, hbuf, r->port );
+            urcl_host_insert( r, hbuf, port );
         }
     }
 
     freeaddrinfo( air );
 
-    /* Lazily select a random initial host, since getaddrinfo() defaults to
-     * sorting the returned IPs. */
-    for ( i = ( getpid( ) % 8 ); i > 0; i-- ) {
-        r->host = r->host->h_next;
+    if ( r->hostcount > 1 ) {
+        /* Select a somewhat random initial host, since getaddrinfo() defaults
+         * to sorting the returned IPs and we don't want to concentrate initial
+         * connections on a single host. Permuting the list would improve
+         * more situations, but is also more work.
+         */
+        for ( i = ( getpid( ) % r->hostcount ); i > 0; i-- ) {
+            r->host = r->host->h_next;
+        }
     }
 
     if ( urcl_reconnect( r ) != 0 ) {
@@ -124,6 +127,7 @@ urcl_host_insert( URCL *r, const char *ip, int port )
     he->h_ip = strdup( ip );
     he->h_port = port;
     r->host = he;
+    r->hostcount++;
     return( 0 );
 }
 
