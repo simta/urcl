@@ -300,7 +300,7 @@ urcl_set( URCL *r, const char *key, const char *value )
     } while (( res->type == REDIS_REPLY_ERROR ) &&
             urcl_redirect( r, res->str ));
 
-    if (( res->type == REDIS_REPLY_STRING ) && ( res->len == 2 ) &&
+    if (( res->type == REDIS_REPLY_STATUS ) && ( res->len == 2 ) &&
             ( memcmp( res->str, "OK", 2 ) == 0 )) {
         ret = 0;
     }
