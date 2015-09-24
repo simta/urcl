@@ -4,6 +4,7 @@
 typedef struct urcl URCL;
 
 URCL        *urcl_connect( const char *host, int port );
+void        urcl_free( URCL * );
 int         urcl_set( URCL *, const char *key, const char *value );
 int         urcl_hset( URCL *, const char *key, const char *field, const char *value );
 int         urcl_expire( URCL *, const char *key, long long );

@@ -94,6 +94,34 @@ cleanup:
     return( NULL );
 }
 
+    void
+urcl_free( URCL *r )
+{
+    struct urcl_host    *h, *next_h;
+
+    if ( r ) {
+        if ( r->host ) {
+            /* Break the circular list */
+            r->host->h_prev->h_next = NULL;
+        }
+        for ( h = r->host; h != NULL; ) {
+            next_h = h->h_next;
+            if ( h->h_rc ) {
+                redisFree( h->h_rc );
+            }
+            if ( h->h_ip ) {
+                free( h->h_ip );
+            }
+            free( h );
+            h = next_h;
+        }
+        if ( r->hostname ) {
+            free( r->hostname );
+        }
+        free( r );
+    }
+}
+
     static int
 urcl_host_insert( URCL *r, const char *ip, int port )
 {
