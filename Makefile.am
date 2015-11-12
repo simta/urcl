@@ -7,7 +7,7 @@ lib_LTLIBRARIES = liburcl.la
 liburcl_la_CFLAGS = -Wall $(HIREDIS_CFLAGS)
 liburcl_la_LIBADD = $(HIREDIS_LIBS)
 liburcl_la_SOURCES = urcl.c urcl.h
-liburcl_la_LDFLAGS = -version-info 2:0:1
+liburcl_la_LDFLAGS = -version-info 2:0:0
 
 include_HEADERS = urcl.h
 
