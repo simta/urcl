@@ -15,5 +15,5 @@ nodist_pkgconfig_DATA = packaging/pkgconfig/urcl.pc
 
 EXTRA_DIST = VERSION packaging/rpm/urcl.spec
 
-rpm: dist-gzip
-	rpmbuild -ta $(distdir).tar.gz
+rpm: dist-xz
+	rpmbuild -ta $(distdir).tar.xz

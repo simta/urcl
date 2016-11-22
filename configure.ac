@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_INIT(urcl, m4_esyscmd([bash version.sh]), paul.arthur@flowerysong.com)
-AM_INIT_AUTOMAKE([foreign])
+AM_INIT_AUTOMAKE([foreign no-dist-gzip dist-xz])
 AC_PREREQ(2.63)
 AC_CONFIG_HEADER(config.h)
 AC_COPYRIGHT([Copyright (c) 2015 Paul Arthur MacIain])
