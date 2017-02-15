@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -226,17 +227,20 @@ urcl_redirect( urclHandle *r, char *err )
 urcl_reconnect( urclHandle *r )
 {
     struct urcl_host    *host;
+    struct timeval      tv_timeout = { 10, 0 };
 
     host = r->host;
     do {
         if ( host->h_rc == NULL ) {
-            host->h_rc = redisConnect( host->h_ip, host->h_port );
+            host->h_rc = redisConnectWithTimeout( host->h_ip, host->h_port,
+                    tv_timeout );
         }
         if ( host->h_rc ) {
             if ( host->h_rc->err ) {
                 redisFree( host->h_rc );
                 host->h_rc = NULL;
             } else {
+                redisSetTimeout( host->h_rc, tv_timeout );
                 r->host = host;
                 return( 0 );
             }
