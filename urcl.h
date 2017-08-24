@@ -2,7 +2,7 @@
 #define URCL_H
 
 #include <stdarg.h>
-#include <hiredis/hiredis.h>
+#include <hiredis.h>
 
 typedef struct urcl urclHandle;
 typedef struct redisReply urclResult;

@@ -12,7 +12,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <hiredis/hiredis.h>
+#include <hiredis.h>
 
 #include "urcl.h"
 
