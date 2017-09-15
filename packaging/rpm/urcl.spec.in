@@ -5,7 +5,6 @@ Name:           @PACKAGE_NAME@
 Version:        @PACKAGE_VERSION@
 Release:        1%{?dist}
 License:        MIT
-Group:          System Environment/Libraries
 URL:            http://flowerysong.com/
 Source0:        %{name}-%{version}.tar.xz
 BuildRequires:  setup
@@ -16,7 +15,6 @@ urcl is the REMote DICtionary Client for Redis.
 
 %package        devel
 Summary:        Headers for urcl
-Group:          Development/Libraries
 Requires:       %{name} = %{version}-%{release}
 
 %description    devel
@@ -34,9 +32,6 @@ make %{?_smp_mflags}
 rm -rf %{buildroot}
 make DESTDIR=%{buildroot} INSTALL_OPTS='' install
 rm -f %{buildroot}/%{_libdir}/liburcl.la
-
-%clean
-rm -rf %{buildroot}
 
 %post -p /sbin/ldconfig
 
